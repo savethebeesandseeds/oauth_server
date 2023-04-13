@@ -2,7 +2,8 @@
 This server ilustrates how to build a lightweight server that authenticate users using OAuth
 # Requires 
 - libmicrohttpd
-- liboauth
+- lgnutls
+- lcurl
 # Implementation instructions
 Access the webpage https://oauth.net/playground/client-registration.html
 
