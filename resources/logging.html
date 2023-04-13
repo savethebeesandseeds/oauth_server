@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Minimalistic OAuth Login</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: sans-serif;
+        background-color: #000000;
+      }
+
+      .container {
+        width: 80%;
+        margin: 0 auto;
+        text-align: center;
+        padding-top: 50px;
+      }
+
+      h1 {
+        font-size: 3em;
+        margin-bottom: 50px;
+      }
+
+      .button {
+        display: inline-block;
+        background-color: #4285f4;
+        color: #fff;
+        font-size: 1.2em;
+        padding: 10px 20px;
+        border-radius: 5px;
+        text-decoration: none;
+        transition: background-color 0.3s ease;
+      }
+
+      .button:hover {
+        background-color: #3367d6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Minimalistic OAuth Login</h1>
+      <a href="{{OAUTH_URL}}" class="button">Log in with OAuth</a>
+    </div>
+  </body>
+</html>
