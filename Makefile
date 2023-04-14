@@ -1,7 +1,7 @@
 # --- --- --- --- --- 
 ENV := gdb-debug
-ENV := no-debug
 ENV := valgrind-debug
+ENV := no-debug
 # --- --- --- --- --- 
 VALGRIND_TOOL=helgrind
 VALGRIND_TOOL=memcheck --leak-check=full --show-leak-kinds=all
@@ -14,6 +14,7 @@ DISABLE_WARNINGS := -Wno-unused-function
 SERVER_LINKS := -lmicrohttpd -lgnutls
 OAUTH_LINKS := -lcurl 
 # --- --- --- --- --- 
+libtest_path=./lib/test
 libexamples_path=./lib/examples
 libinclude_path=./lib/include
 libMHD_path=/usr/local/lib
@@ -72,6 +73,23 @@ ifeq ($(ENV),valgrind-debug)
 	valgrind --tool=$(VALGRIND_TOOL) ./build/oauth2example.o
 else
 	./build/oauth2example.o
+endif
+endif
+# --- --- --- --- --- 
+m_queue_test:
+	$(GCC) $(HEADERS) \
+	$(libtest_path)/queue_test.c $(OAUTH_LINKS) -o ./build/queue_test.o
+# --- --- --- --- --- 
+queue_test:
+	make m_queue_test
+	echo "building [queue_test]..."
+ifeq ($(ENV),gdb-debug)
+	gdb ./build/queue_test.o
+else
+ifeq ($(ENV),valgrind-debug)
+	valgrind --tool=$(VALGRIND_TOOL) ./build/queue_test.o
+else
+	./build/queue_test.o
 endif
 endif
 # --- --- --- --- --- 

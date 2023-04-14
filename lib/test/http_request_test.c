@@ -17,22 +17,25 @@ int main(int argc, char const *argv[])
   queue_insert_item_on_top(params, &(param_type_t){"scope", "photo+offline_access"}, NULL);
   queue_insert_item_on_top(params, &(param_type_t){"state", "du9JpZqN6LKO_gX4"}, NULL);
   
-  /* Request memory object */
-  request_memory_t *request_text_response = build_request_memory();
+  request_memory_t request_text_response = {
+    .response=NULL,
+    .size=0
+  };
+
   /* Request configuration */
   request_config_t *request_config = build_request_config(
     METHOD, /* method */
     URL,  /* url */
     data_callback_text, /* data_callback */
-    (void*)request_text_response, /* arg_data_callback */
+    (void*)&request_text_response, /* arg_data_callback */
     header_callback, /* headers_callback */
     NULL, /* arg_headers_callback */
     headers, /* headers */
     params, /* get params */
     NULL, /* post_fileds */
     (size_t)0, /* post_fileds_size */
-    false, /* curl_verbose */
-    false, /* trust_self_signed_server_ssl_tls */
+    true, /* curl_verbose */
+    true, /* trust_self_signed_server_ssl_tls */
     NULL, /* ssl_cert_type */
     NULL, /* ssl_cert */
     NULL, /* ssl_key */
@@ -40,11 +43,8 @@ int main(int argc, char const *argv[])
   );
   /* Make the request */
   http_request(request_config);
-  fprintf(stdout,"Response: \n%s\n",request_text_response->response);
-
-  /* clear the memory */
-  free_request_config(request_config);
-  free_request_memory(request_text_response);
+  fprintf(stdout,"Response: \n%s\n",request_text_response.response);
+  free(request_text_response.response);
 
   return 0;
 }

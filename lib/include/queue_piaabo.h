@@ -189,8 +189,6 @@ static inline void queue_to_base(__queue_t *Q){
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 /* method for appending __queue_item_t to __queue_t top */
 static inline void queue_insert_item_on_top(__queue_t *Q, void *data, free_fn_pointer *free_fn){
-  /* assert the queue is healty */
-  ASSERT(queue_is_healty(Q));
   /* go to the top */
   queue_to_top(Q);
   /* create new queue item */
@@ -206,15 +204,10 @@ static inline void queue_insert_item_on_top(__queue_t *Q, void *data, free_fn_po
   /* increment the queue size and index */
   Q->load_size ++;
   Q->load_index ++;
-  
-  /* assert the result queue is healty */
-  ASSERT(queue_is_healty(Q));
 }
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 /* method for appending __queue_item_t to __queue_t base */
 static inline void queue_insert_item_on_base(__queue_t *Q, void *data, free_fn_pointer *free_fn){
-  /* assert the queue is healty */
-  ASSERT(queue_is_healty(Q));
   /* go to the base */
   queue_to_base(Q);
   /* create new queue item */
@@ -229,12 +222,10 @@ static inline void queue_insert_item_on_base(__queue_t *Q, void *data, free_fn_p
   }
   /* increment only the queue size */
   Q->load_size ++;
-  
-  /* assert the result queue is healty */
-  ASSERT(queue_is_healty(Q));
 }
 /* fabric for a general porpouse queue */
 static __queue_t *queue_fabric(){
+  log_warn("Missing queue mutex for a thread safe implementation\n");
   /* allocate memory for the queue */
   __queue_t *new_queue = (__queue_t*)malloc(sizeof(__queue_t));
   if(new_queue == NULL)
@@ -259,9 +250,8 @@ static void queue_destructor(__queue_t *Q){
   /* free all the items */
   while(queue_to_back(Q) != NULL)
     queue_item_destructor(Q->__head->__up);
-  queue_item_destructor(Q->__head);
-  /* assert the queue is healty */
-  ASSERT(queue_is_healty(Q));
+  if(Q->__head!=NULL)
+    queue_item_destructor(Q->__head);
   /* free the queue */
   free(Q);
 }

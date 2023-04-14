@@ -51,7 +51,18 @@ typedef struct {
   struct curl_slist *_headers_list;            /* hidden */
   pthread_mutex_t _request_mutex;              /* hidden curl is thread safe this mutex is to safely change the request arguemts */
 } request_config_t;
-
+/* build request memory */
+request_memory_t *build_request_memory(){
+  request_memory_t* nreq_mem = (request_memory_t*)malloc(sizeof(request_memory_t));
+  nreq_mem->response=NULL;
+  nreq_mem->size=0;
+  return nreq_mem;
+}
+/* free request memory */
+void free_request_memory(request_memory_t *req_mem){
+  free(req_mem->response);
+  free(req_mem);
+}
 /* request config functions */
 request_config_t * build_request_config(
   /* required parameters */
@@ -174,19 +185,19 @@ static void url_encode_string(CURL *curl_handle, char *string, char **encoded_st
 }
 /* encode_get_params */
 static void encode_get_params(CURL *curl_handle, params_queue_t *params, char **encoded_params){
-  /* temporal variables */
-  char temp_buffer_in[1<<16]="\0";
-  char temp_buffer_out[1<<16]="\0";
-  char *temp_in=temp_buffer_in;
-  char *temp_out=temp_buffer_out;
-  char *temp_key;
-  char *temp_value;
-  bool is_first=true;
-  /* initialize encoded_params variable */
-  memset(*encoded_params, 0, strlen(*encoded_params));
   /* validate if there are any params */
   if(queue_is_empty(params))
     return;
+  /* temporal variables */
+  char *temp_in=(char*)malloc(65536);
+  char *temp_out=(char*)malloc(65536);
+  char *temp_key;
+  char *temp_value;
+  bool is_first=true;
+  memset(temp_in, 0, 65536);
+  memset(temp_out, 0, 65536);
+  /* initialize encoded_params variable */
+  memset(*encoded_params, 0, strlen(*encoded_params));
   __queue_item_t *item=NULL;
   queue_to_base(params);
   while((item=queue_to_next(params)) != NULL){
@@ -217,14 +228,18 @@ static void encode_get_params(CURL *curl_handle, params_queue_t *params, char **
       is_first=false;
     }
   }
+  /* free the temporal pointers */
+  free(temp_in);
+  free(temp_out);
 }
 /* configure the curl_handle acording to options */
 void configure_curl(CURL *curl_handle, unsigned int option, request_config_t *rc){
   /* temporal variables */
-  char url[1<<16]="\0";
-  char encoded_url_buffer[1<<16]="\0";
-  char *encoded_url=encoded_url_buffer;
-  char *temp_header;
+  char *url=(char*)malloc(65536);
+  char *encoded_url=(char*)malloc(65536);
+  header_type_t *temp_header=(header_type_t*)malloc(sizeof(header_type_t));
+  memset(url, 0, 65536);
+  memset(encoded_url, 0, 65536);
   /* case options */
   switch (option){
   /*  
@@ -302,9 +317,9 @@ void configure_curl(CURL *curl_handle, unsigned int option, request_config_t *rc
       __queue_item_t *item=NULL;
       queue_to_base(rc->_headers);
       while((item=queue_to_next(rc->_headers)) != NULL){
-        temp_header = ((header_type_t*)item->data)->value;
-        if(temp_header!=NULL && strlen(temp_header)>0)
-          rc->_headers_list = curl_slist_append(rc->_headers_list, temp_header);
+        memcpy(temp_header, (header_type_t*)item->data, sizeof(header_type_t));
+        if(temp_header!=NULL && temp_header->value[0]!='\0' && strlen(temp_header->value)>0)
+          rc->_headers_list = curl_slist_append(rc->_headers_list, temp_header->value);
       }
       curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, rc->_headers_list);
     } else {
@@ -383,13 +398,17 @@ void configure_curl(CURL *curl_handle, unsigned int option, request_config_t *rc
   default:
     break;
   }
+  /* free the temporal variables */
+  free(url);
+  free(encoded_url);
+  free(temp_header);
 }
 /* finalize_configure_curl */
 void finalize_configure_curl(request_config_t *rc){
-  if(rc->_headers_list!=NULL)
-    curl_slist_free_all(rc->_headers_list);
   queue_destructor(rc->_headers);
   queue_destructor(rc->_params);
+  if(rc->_headers_list!=NULL)
+    curl_slist_free_all(rc->_headers_list);
 }
 /* request module finalization */
 static void request_finit(){
@@ -462,11 +481,11 @@ static void http_request(request_config_t *config){
   CURLcode curl_code = curl_easy_perform(curl_handle);
   /* unlock thread */
   pthread_mutex_unlock(&curl_lock);
-  /* finalize the request list and queues */
-  finalize_configure_curl(config);
   /* check for errors */
   if(curl_code!=CURLE_OK)
     log_err("curl failed to perform [basic_get_query]: %s\n",curl_easy_strerror(curl_code));
+  /* finalize the request list and queues */
+  finalize_configure_curl(config);
   /* clean the handle */
   curl_easy_cleanup(curl_handle);
   /* free the mutex lock */
