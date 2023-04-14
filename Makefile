@@ -1,7 +1,7 @@
 # --- --- --- --- --- 
 ENV := gdb-debug
-ENV := valgrind-debug
 ENV := no-debug
+ENV := valgrind-debug
 # --- --- --- --- --- 
 VALGRIND_TOOL=helgrind
 VALGRIND_TOOL=memcheck --leak-check=full --show-leak-kinds=all
@@ -59,8 +59,8 @@ endif
 endif
 # --- --- --- --- --- 
 m_oauth_test:
-	$(GPP) $(HEADERS) \
-	$(libexamples_path)/oauth2example.cpp $(OAUTH_LINKS) -o ./build/oauth2example.o
+	$(GCC) $(HEADERS) \
+	$(libexamples_path)/oauth2example.c $(OAUTH_LINKS) -o ./build/oauth2example.o
 # --- --- --- --- --- 
 oauth_test:
 	make m_oauth_test

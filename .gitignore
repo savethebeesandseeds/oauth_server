@@ -2,3 +2,4 @@
 access/*.pem
 access/*.key
 access/*.cert
+vgcore.*

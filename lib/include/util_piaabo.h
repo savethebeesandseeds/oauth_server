@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <regex.h>
 
 #define ANSI_COLOR_ERROR "\x1b[41m"
@@ -67,6 +68,11 @@ pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 }
 /* this function prints boolean values */
 #define print_bool(dinput) dinput? "True":"False"
+
+/* this function rise an error if false */
+#define ASSERT(expr) do{if(!(expr)){__ASSERT(__func__,__FILE__,__LINE__,#expr)}} while(0) /*I am forcing the user to put the ";"*/
+#define __ASSERT(__func, __file, __lineno, __sexp) log_fatal("Failed assertion! __func=%s __file=%s  __lineno=%u __sexp=%s \n", __func, __file, __lineno, __sexp);
+
 /* functionaly to encodebase64 */
 static char *encode_base64(const char *message){
   /* valid characters */
