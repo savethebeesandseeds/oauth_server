@@ -7,7 +7,7 @@ typedef struct item_type {
 typedef __queue_t items_queue_t;
 
 
-#define COUNT_ITEMS 1000000
+#define COUNT_ITEMS 10
 int main(int argc, char const *argv[])
 {
   clock_t start;
@@ -26,9 +26,11 @@ int main(int argc, char const *argv[])
   /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
   /* queue population */
   start = clock();
-  item_type_t ditem = {"key", "value"};
   for(int i = 0; i < COUNT_ITEMS; i++) {
-    queue_insert_item_on_top(items, &ditem, NULL);
+    item_type_t *ditem = (item_type_t *)malloc(sizeof(item_type_t));
+    ditem->key="key";
+    ditem->value="value";
+    queue_insert_item_on_top(items, ditem, sizeof(item_type_t), free);
   }
   end = clock();
   time_taken = (double)(end - start) / CLOCKS_PER_SEC; // Calculate the time taken

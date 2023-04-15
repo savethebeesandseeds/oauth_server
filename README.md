@@ -1,5 +1,6 @@
 # Waajacu oauth_server
-This server ilustrates how to build a lightweight server that authenticate users using OAuth
+This server ilustrates how to build a lightweight C server that authenticate users using OAuth.
+
 # Requires 
 - libmicrohttpd
 - lgnutls

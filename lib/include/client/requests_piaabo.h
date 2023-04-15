@@ -109,46 +109,8 @@ request_config_t * build_request_config(
   /* return the new request object instance */
   return nrc;
 }
-/* free the memory of REQUEST_CONFIG */
-void free_request_config(request_config_t *rc){
-  /* free the headers list */
-  if(rc->_headers_list!=NULL){
-    curl_slist_free_all(rc->_headers_list);
-  }
-  /* finalize the mutex */
-  pthread_mutex_destroy(&rc->_request_mutex);
-  /* free the request config */
-  free(rc);
-}
-/* build_request_config light overloading */
-request_config_t * build_request_config_0xA(
-  /* required parameters */
-  const char *method,
-  const char *url,
-  data_callback_pointer *data_callback, 
-  void*arg_data_callback, 
-  header_callback_pointer *headers_callback,
-  void* arg_headers_callback,
-  headers_queue_t *headers,
-  params_queue_t *params,
-  void *post_fileds,
-  size_t post_fileds_size){
-  /* paremeters with default values */
-  bool curl_verbose=CURL_VERBOSE;
-  bool trust_self_signed_server_ssl_tls=false;
-  const char * ssl_cert_type=NULL;
-  const char * ssl_cert=NULL;
-  const char * ssl_key=NULL;
-  const char * ssl_key_password=NULL;
-
-  return build_request_config(
-    /* required parameters */ method,url, /* paremeters with default values */
-    data_callback,arg_data_callback,headers_callback,
-    arg_headers_callback,headers,params,post_fileds,post_fileds_size,curl_verbose,
-    trust_self_signed_server_ssl_tls,ssl_cert_type,ssl_cert,ssl_key,ssl_key_password);
-}
-/* build_request_config minimal overloading */
-request_config_t * build_request_config_0x2(
+/* initialize_request_config */
+request_config_t *initialize_request_config(
   /* required parameters */
   const char *method,
   const char *url){
@@ -157,8 +119,8 @@ request_config_t * build_request_config_0x2(
   void* arg_data_callback=NULL;
   header_callback_pointer *headers_callback=NULL;
   void* arg_headers_callback=NULL;
-  headers_queue_t *headers=NULL;
-  params_queue_t *params=NULL;
+  headers_queue_t *headers = queue_fabric();
+  params_queue_t *params = queue_fabric();
   void *post_fileds=NULL;
   size_t post_fileds_size=0;
   bool curl_verbose=CURL_VERBOSE;
@@ -173,6 +135,50 @@ request_config_t * build_request_config_0x2(
     data_callback,arg_data_callback,headers_callback,
     arg_headers_callback,headers,params,post_fileds,post_fileds_size,curl_verbose,
     trust_self_signed_server_ssl_tls,ssl_cert_type,ssl_cert,ssl_key,ssl_key_password);
+}
+/* free the memory of REQUEST_CONFIG */
+void free_request_config(request_config_t *rc){
+  /* finalize queues */
+  queue_destructor(rc->_headers);
+  queue_destructor(rc->_params);
+  /* free the headers list */
+  if(rc->_headers_list!=NULL){
+    curl_slist_free_all(rc->_headers_list);
+  }
+  /* finalize the mutex */
+  pthread_mutex_destroy(&rc->_request_mutex);
+  /* free the request config */
+  free(rc);
+}
+/* add header functionality */
+void add_header(request_config_t *rc, const char *dheader){
+  if(rc==NULL){
+    log_warn("Null reqest_config_t, hint: use initialize_request_config()\n");
+    return;
+  }
+  /* create new header_type_t */
+  header_type_t *header = (header_type_t*) malloc(sizeof(header_type_t));
+  memset(header, 0, sizeof(header_type_t));
+  header->value[0] = '\0';
+  memcpy(header->value, dheader, sizeof(char)*strlen(dheader));
+  /* add header to the queue */
+  queue_insert_item_on_top(rc->_headers, header, sizeof(header_type_t), free); // the queue will free the memory on queue_destructor
+}
+/* add param functionality */
+void add_param(request_config_t *rc, const char *dkey, const char *dvalue){
+  if(rc==NULL){
+    log_warn("Null reqest_config_t, hint: use initialize_request_config()\n");
+    return;
+  }
+  /* create new param_type_t */
+  param_type_t *param = (param_type_t*) malloc(sizeof(param_type_t));
+  memset(param, 0, sizeof(param_type_t));
+  param->key[0] = '\0';
+  param->value[0] = '\0';
+  memcpy(param->key, dkey, sizeof(char)*strlen(dkey));
+  memcpy(param->value, dvalue, sizeof(char)*strlen(dvalue));
+  /* add param to the queue */
+  queue_insert_item_on_top(rc->_params, param, sizeof(param_type_t), free); // the queue will free the memory on queue_destructor
 }
 /* url_encode_string */
 static void url_encode_string(CURL *curl_handle, char *string, char **encoded_string){
@@ -202,14 +208,14 @@ static void encode_get_params(CURL *curl_handle, params_queue_t *params, char **
   queue_to_base(params);
   while((item=queue_to_next(params)) != NULL){
     /* clear the temporary variables */
-    memset(temp_in, 0, strlen(temp_in));
-    memset(temp_out, 0, strlen(temp_out));
+    memset(temp_in, 0, sizeof(char)*strlen(temp_in));
+    memset(temp_out, 0, sizeof(char)*strlen(temp_out));
     /* fabricate the query parameter */
     temp_key=((param_type_t*)item->data)->key;
     temp_value=((param_type_t*)item->data)->value;
     /* fabricate the string */
     if(temp_key != NULL && temp_value != NULL){
-      strcat(temp_in,temp_key);
+      strcat(temp_in, temp_key);
       strcat(temp_in,"=");
       strcat(temp_in,temp_value);
     } else if(temp_key != NULL){
@@ -405,8 +411,6 @@ void configure_curl(CURL *curl_handle, unsigned int option, request_config_t *rc
 }
 /* finalize_configure_curl */
 void finalize_configure_curl(request_config_t *rc){
-  queue_destructor(rc->_headers);
-  queue_destructor(rc->_params);
   if(rc->_headers_list!=NULL)
     curl_slist_free_all(rc->_headers_list);
 }

@@ -18,7 +18,8 @@ typedef void free_fn_pointer(void *ptr); // void (*free_fn)(void *)
  * [__free_data_fn] contains a pointer to a function to free the data.
  */
 typedef struct queue_item_t {
-  void **data;                    /* pointer to the data item */
+  void *data;                    /* pointer to the data item */
+  size_t __data_size;             /* size of the data item */
   struct queue_item_t *__up;      /* pointer to the next queue item */
   struct queue_item_t *__down;    /* pointer to the previous queue item */
   free_fn_pointer *__free_data_fn;/* pointer to a function to free the __queue_item->data */
@@ -57,15 +58,15 @@ typedef struct queue_t {
 static inline bool queue_is_empty(__queue_t *Q);
 static inline bool queue_throw_unhealty(const char *msg);
 static inline bool queue_is_healty(__queue_t *Q);
-static inline __queue_item_t *queue_item_fabric(void *data, free_fn_pointer *free_fn);
+static inline __queue_item_t *queue_item_fabric(void *data, size_t data_size, free_fn_pointer *free_fn);
 static void queue_item_destructor(__queue_item_t *item);
 static inline __queue_item_t *queue_to_next(__queue_t *Q);
 static inline __queue_item_t *queue_to_back(__queue_t *Q);
 static inline __queue_item_t *queue_to_index(__queue_t *Q, int index);
 static inline void queue_to_top(__queue_t *Q);
 static inline void queue_to_base(__queue_t *Q);
-static inline void queue_insert_item_on_top(__queue_t *Q, void *data, free_fn_pointer *free_fn);
-static inline void queue_insert_item_on_base(__queue_t *Q, void *data, free_fn_pointer *free_fn);
+static inline void queue_insert_item_on_top(__queue_t *Q, void *data, size_t data_size, free_fn_pointer *free_fn);
+static inline void queue_insert_item_on_base(__queue_t *Q, void *data, size_t data_size, free_fn_pointer *free_fn);
 static __queue_t *queue_fabric();
 static void queue_destructor(__queue_t *Q);
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
@@ -124,11 +125,12 @@ static inline bool queue_is_healty(__queue_t *Q){
 }
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 /* method fabric for queue item */
-static inline __queue_item_t *queue_item_fabric(void *data, free_fn_pointer *free_fn){
+static inline __queue_item_t *queue_item_fabric(void *data, size_t data_size, free_fn_pointer *free_fn){
   __queue_item_t *new_queue_item = (__queue_item_t*) malloc(sizeof(__queue_item_t));
   if(new_queue_item == NULL)
     log_fatal("Unable to allocate memory for a new queue item\n");
-  new_queue_item->data = &data;
+  new_queue_item->data = data;
+  new_queue_item->__data_size = data_size;
   new_queue_item->__up = NULL;
   new_queue_item->__down = NULL;
   new_queue_item->__free_data_fn = free_fn;
@@ -137,8 +139,12 @@ static inline __queue_item_t *queue_item_fabric(void *data, free_fn_pointer *fre
 }
 /* method clear queue item */
 static void queue_item_destructor(__queue_item_t *item){
-  if(item->__free_data_fn != NULL) /* free the data if required */
+  if(item==NULL || item->data == NULL)
+    return;
+  /* free the data if required */
+  if(item->__free_data_fn != NULL)
     item->__free_data_fn(item->data);
+  /* free the item */
   free(item);
 }
 /* method to retrive the next __queue_item, returns NULL when head at top */
@@ -188,11 +194,11 @@ static inline void queue_to_base(__queue_t *Q){
 }
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 /* method for appending __queue_item_t to __queue_t top */
-static inline void queue_insert_item_on_top(__queue_t *Q, void *data, free_fn_pointer *free_fn){
+static inline void queue_insert_item_on_top(__queue_t *Q, void *data, size_t data_size, free_fn_pointer *free_fn){
   /* go to the top */
   queue_to_top(Q);
   /* create new queue item */
-  __queue_item_t *new_item = queue_item_fabric(data, free_fn);
+  __queue_item_t *new_item = queue_item_fabric(data, data_size, free_fn);
   /* assing the item to the queue */
   if(queue_is_empty(Q)){
     Q->__head = new_item;
@@ -207,11 +213,11 @@ static inline void queue_insert_item_on_top(__queue_t *Q, void *data, free_fn_po
 }
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 /* method for appending __queue_item_t to __queue_t base */
-static inline void queue_insert_item_on_base(__queue_t *Q, void *data, free_fn_pointer *free_fn){
+static inline void queue_insert_item_on_base(__queue_t *Q, void *data, size_t data_size, free_fn_pointer *free_fn){
   /* go to the base */
   queue_to_base(Q);
   /* create new queue item */
-  __queue_item_t *new_item = queue_item_fabric(data, free_fn);
+  __queue_item_t *new_item = queue_item_fabric(data, data_size, free_fn);
   /* assing the item to the queue */
   if(queue_is_empty(Q)){
     Q->__head = new_item;
@@ -243,6 +249,8 @@ static __queue_t *queue_fabric(){
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 /* destructor for a general porpouse queue */
 static void queue_destructor(__queue_t *Q){
+  if(Q==NULL)
+    return;
   /* assert the queue is healty */
   ASSERT(queue_is_healty(Q));
   /* go to the top */

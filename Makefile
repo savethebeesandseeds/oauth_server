@@ -1,7 +1,7 @@
 # --- --- --- --- --- 
 ENV := gdb-debug
-ENV := valgrind-debug
 ENV := no-debug
+ENV := valgrind-debug
 # --- --- --- --- --- 
 VALGRIND_TOOL=helgrind
 VALGRIND_TOOL=memcheck --leak-check=full --show-leak-kinds=all
