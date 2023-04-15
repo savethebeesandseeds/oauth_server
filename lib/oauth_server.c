@@ -9,9 +9,9 @@
 // Build: make tauhba_server
 
 #include "stdio.h"
-#include "./include/server/server_noauth.h"
-#include "./include/server/server_piaabo.h"
-#include "./include/util_piaabo.h"
+#include "server_noauth.h"
+#include "server_piaabo.h"
+#include "util_piaabo.h"
 #include "file_piaabo.h"
 
 #define SERVERPORT 8888

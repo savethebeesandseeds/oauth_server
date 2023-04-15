@@ -14,10 +14,9 @@ DISABLE_WARNINGS := -Wno-unused-function
 SERVER_LINKS := -lmicrohttpd -lgnutls
 OAUTH_LINKS := -lcurl 
 # --- --- --- --- --- 
-libtest_path=./lib/test
-libexamples_path=./lib/examples
+libtest_path=./test
+libexamples_path=./examples
 libinclude_path=./lib/include
-libMHD_path=/usr/local/lib
 # --- --- --- --- --- 
 GPP := g++
 GCC := gcc
@@ -35,9 +34,7 @@ GCC += -Wall $(DISABLE_WARNINGS) $(STATIC_FLAGS)
 endif
 endif
 HEADERS := \
-	-I $(libinclude_path)/ \
-	-I $(libinclude_path)/client/ \
-	-I $(libinclude_path)/server/ 
+	-I $(libinclude_path)/ 
 # --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- 
 clean:
 	rm -f ./build/*.o

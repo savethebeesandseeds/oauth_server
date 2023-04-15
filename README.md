@@ -5,6 +5,7 @@ This server ilustrates how to build a lightweight C server that authenticate use
 - libmicrohttpd
 - lgnutls
 - lcurl
+
 # Implementation instructions
 Access the webpage https://oauth.net/playground/client-registration.html
 
