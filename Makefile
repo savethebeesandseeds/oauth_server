@@ -12,7 +12,7 @@ STATIC_FLAGS := -static # enable static
 STATIC_FLAGS := # disable static
 DISABLE_WARNINGS := -Wno-unused-function
 SERVER_LINKS := -lmicrohttpd -lgnutls
-OAUTH_LINKS := -lcurl 
+CLIENT_LINKS := -lcurl 
 # --- --- --- --- --- 
 libtest_path=./test
 libexamples_path=./examples
@@ -58,7 +58,7 @@ endif
 # --- --- --- --- --- 
 m_oauth_test:
 	$(GCC) $(HEADERS) \
-	$(libexamples_path)/oauth2example.c $(OAUTH_LINKS) -o ./build/oauth2example.o
+	$(libexamples_path)/oauth2example.c $(CLIENT_LINKS) -o ./build/oauth2example.o
 # --- --- --- --- --- 
 oauth_test:
 	make m_oauth_test
@@ -75,7 +75,7 @@ endif
 # --- --- --- --- --- 
 m_queue_test:
 	$(GCC) $(HEADERS) \
-	$(libtest_path)/queue_test.c $(OAUTH_LINKS) -o ./build/queue_test.o
+	$(libtest_path)/queue_test.c -o ./build/queue_test.o
 # --- --- --- --- --- 
 queue_test:
 	make m_queue_test
@@ -87,6 +87,23 @@ ifeq ($(ENV),valgrind-debug)
 	valgrind --tool=$(VALGRIND_TOOL) ./build/queue_test.o
 else
 	./build/queue_test.o
+endif
+endif
+# --- --- --- --- --- 
+m_html_render_test:
+	$(GCC) $(HEADERS) \
+	$(libtest_path)/html_render_test.c $(SERVER_LINKS) -o ./build/html_render_test.o
+# --- --- --- --- --- 
+html_render_test:
+	make m_html_render_test
+	echo "building [html_render_test]..."
+ifeq ($(ENV),gdb-debug)
+	gdb ./build/html_render_test.o
+else
+ifeq ($(ENV),valgrind-debug)
+	valgrind --tool=$(VALGRIND_TOOL) ./build/html_render_test.o
+else
+	./build/html_render_test.o
 endif
 endif
 # --- --- --- --- --- 

@@ -8,6 +8,9 @@
 #include "queue_piaabo.h"
 
 #define CURL_VERBOSE true /* default value for CURL verbose */
+#define HEADER_BUFFER_SIZE (1<<16) /* 65536 */
+#define PARAM_BUFFER_SIZE (1<<16) /* 65536 */
+
 pthread_mutex_t curl_lock=PTHREAD_MUTEX_INITIALIZER;
 
 /* function pointers */
@@ -16,9 +19,9 @@ typedef size_t header_callback_pointer(char *buffer, size_t size, size_t nitems,
 
 /* types of queues */
 typedef __queue_t headers_queue_t;
-typedef struct {char value[1<<12];} header_type_t;
+typedef struct {char value[HEADER_BUFFER_SIZE];} header_type_t;
 typedef __queue_t params_queue_t;
-typedef struct {char key[1<<12]; char value[1<<12];} param_type_t;
+typedef struct {char key[PARAM_BUFFER_SIZE]; char value[PARAM_BUFFER_SIZE];} param_type_t;
 
 /* structures */
 typedef struct {

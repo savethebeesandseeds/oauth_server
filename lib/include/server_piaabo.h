@@ -16,29 +16,21 @@
 
 #include "util_piaabo.h"
 #include "file_piaabo.h"
+#include "queue_piaabo.h"
+#include "response_piaabo.h"
 
 #define MHD_RequestTerminationCode_to_string (const char[4][40]) {\
   "TERMINATED_COMPLETED_OK","TERMINATED_WITH_ERROR","TERMINATED_TIMEOUT_REACHED","TERMINATED_DAEMON_SHUTDOWN"}
-#define COOKIE_SIZE 64
-#define MAX_HEADERS 64
-#define MAX_FOOTERS 64
-#define MAX_TEMPLATE_REPLACEMENTS  64
+
+#define SESSION_COOKIE_SIZE (1<<6)  /* 64: this is the length of the session cookie  */
+#define TEMPLATE_MAP_BUFFER_SIZE (1<<16) /* 65536: the maximun length a template replacement can have */
 
 typedef const char* output_char_function_pointer();
 typedef enum MHD_Result route_pointer(
   void *dh_cls, struct MHD_Connection *connection);
-typedef struct {
-  char *keyWord;
-  char *replaceBy;
-} HTML_TemplateKeyValue;
-typedef struct {
-  char *keyWord;
-  char *valueWord;
-} HeadersKeyValue;
-typedef struct {
-  char *keyWord;
-  char *valueWord;
-} FootersKeyValue;
+
+typedef __queue_t template_map_queue_t;
+typedef struct {char keyWord[TEMPLATE_MAP_BUFFER_SIZE]; char replaceBy[TEMPLATE_MAP_BUFFER_SIZE];} template_map_type_t;
 
 /* access function to process Incomming request */
 static enum MHD_Result on_client_connect(
@@ -113,192 +105,102 @@ static void log_request(
   MHD_get_connection_values(connection, MHD_FOOTER_KIND, &log_connection_value, (void *)&ANSI_COLOR_Bright_Yellow);
 }
 /* session manager with cookies */
-static void session_cookie(char *set_value){
+static void make_session_cookie(char *set_value){
   log_warn("Session Cookie needs to be set better than just random.\n");
   /* autiliary variable */
-  char raw_value[COOKIE_SIZE];
+  char raw_value[SESSION_COOKIE_SIZE];
   /* random method to create cookie */
   for (unsigned int i=0;i<sizeof(raw_value);i++)
     raw_value[i]='A' + (rand () % 26); /* bad PRNG! */
   raw_value[64] = '\0';
-  snprintf(set_value, 2*COOKIE_SIZE, "%s=%s","SESSION", raw_value);
+  snprintf(set_value, 2*SESSION_COOKIE_SIZE, "%s=%s","SESSION", raw_value);
+}
+/*  */
+static inline const char* get_session_cookie(server_response_t *response){
+  /* reading cookies */
+  return MHD_lookup_connection_value(
+      response->mhd_connection, MHD_COOKIE_KIND, "SESSION");
 }
 /* set session cookie */
-static enum MHD_Result set_session_cookie (
-  struct MHD_Connection *connection,
-  struct MHD_Response *response){
+static enum MHD_Result set_session_cookie(server_response_t *response){
   /* autiliary variable */
-  char set_value[2*COOKIE_SIZE];
-  /* validate the response */
-  if(response==NULL)
-    log_fatal("Unable to set cookie on a null response\n");
-  /* reading cookies */
-  const char *read_value = 
-    MHD_lookup_connection_value(
-      connection, MHD_COOKIE_KIND, "SESSION");
-  if(read_value!=NULL){
-    log("Session cookie found\n");
-    return MHD_YES;
+  char buffer[2*SESSION_COOKIE_SIZE];
+  /* autiliary variable */
+  if(get_session_cookie(response) == NULL){
+    log("Setting Session cookie\n");
+    /* produce a value for the sessoin cookie */
+    make_session_cookie(buffer);
+    /* setting cookie */
+    return MHD_add_response_header(
+      response->mhd_response, MHD_HTTP_HEADER_SET_COOKIE, buffer);
   }
-  /* setting cookie */
-  log("Setting Session cookie\n");
-  session_cookie(set_value);
-  return MHD_add_response_header(
-    response, MHD_HTTP_HEADER_SET_COOKIE, set_value);
-}
-/* respond with HTML */
-static enum MHD_Result create_html_response(
-  const char* page_contents, 
-  struct MHD_Connection *connection, 
-  struct MHD_Response **response){
-  /* verify the response is NULL */
-  if(*response != NULL)
-    log_fatal("Input MHD_Response on create_html_response must be a NULL pointer, just to track the pointer.\n");
-  /* fill response from buffer */
-  *response = MHD_create_response_from_buffer(
-    strlen(page_contents), (void*)page_contents, MHD_RESPMEM_PERSISTENT);
-  /* verify the response has been set */
-  if(*response == NULL)
-    return MHD_NO;
-  /* return success */
+  /* session cookie found */
+  log("Session cookie found\n");
   return MHD_YES;
 }
-/* respond with HTML */
-static enum MHD_Result respond_with_html(
-  const char* page_contents, 
-  struct MHD_Connection *connection, 
-  unsigned int status_code,
-  HeadersKeyValue headers[MAX_HEADERS],
-  FootersKeyValue footers[MAX_FOOTERS]){
-  /* initialize auxiliary variables */
-  const char *content_type="text/html";
-  enum MHD_Result result;
-  struct MHD_Response *response = NULL;
-  /* initialzie an HTML response */
-  result = create_html_response(
-    page_contents, connection, &response);
-  /* validate the result */
-  if(result == MHD_NO){
-    MHD_destroy_response(response);
-    return MHD_NO;
-  }
-  /* add the response headers */
-  MHD_add_response_header(
-    response, "Content-Type", content_type);
-  if(headers != NULL)
-    for(size_t index=0; index<MAX_HEADERS && headers[index].keyWord != NULL && headers[index].valueWord != NULL; index++)
-      MHD_add_response_header(response, 
-        headers[index].keyWord, headers[index].valueWord);
-  /* add the response footers */
-  if(footers != NULL)
-    for(size_t index=0; index<MAX_FOOTERS && footers[index].keyWord != NULL && footers[index].valueWord != NULL; index++)
-      MHD_add_response_footer(response, 
-        footers[index].keyWord, footers[index].valueWord);
-  /* queue the response */
-  result = MHD_queue_response(
-    connection, status_code, response);
-  /* log response */
-  if(result == MHD_NO) 
-    log_err("Unable to respond with %s\n", content_type)
-  else log("--- --- %sResponding with%s: statusCode:[%d], Content-Type:[%s]\n",
-    ANSI_COLOR_Bright_Yellow, ANSI_COLOR_RESET, status_code, content_type);
-  /* free response */
-  MHD_destroy_response(response);
-
-  /* return result */
-  return result;
+/* initialize template map */
+static template_map_queue_t *initialize_template_map(){
+  return queue_fabric();
 }
-/* create_response_from_file */
-static enum MHD_Result create_response_from_file(
-  int fd,
-  struct MHD_Connection *connection, 
-  struct MHD_Response **response){
-  /* temporary variables */
-  struct stat sbuf;
-  /* verify the response is NULL */
-  if(*response != NULL)
-    log_fatal("Input MHD_Response on create_response_from_file must be a NULL pointer, just to track the pointer.\n");
-  /* verify the file contetns */
-  if((-1 == fd) || (0 != fstat(fd, &sbuf)) ){
-    if (fd != -1) (void) close (fd);
-    return respond_with_html(
-      "<html><body>An internal server error has occurred!</body></html>", 
-      connection, MHD_HTTP_INTERNAL_SERVER_ERROR, NULL, NULL);
-  }
-  /* fabric MHD_Response with binary buffer data */
-  *response = MHD_create_response_from_fd_at_offset64(sbuf.st_size, fd, 0);
-  /* verify the response has been set */
-  if(*response==NULL)
-    return MHD_NO;
-  
-  /* return sucess */
-  return MHD_YES; 
+static void destroy_template_map(template_map_queue_t *template_map){
+  if(template_map!=NULL) queue_destructor(template_map);
 }
-/* respond with FILE */
-static enum MHD_Result respond_with_file(
-  int fd,
-  const char *content_type,
-  struct MHD_Connection *connection, 
-  unsigned int status_code,
-  HeadersKeyValue headers[MAX_HEADERS],
-  FootersKeyValue footers[MAX_FOOTERS]){
-  /* initialize auxiliary variables */
-  enum MHD_Result result;
-  struct MHD_Response *response = NULL;
-  /* initialzie an HTML response */
-  result = create_response_from_file(fd, connection, &response);
-  /* validate the result */
-  if(result == MHD_NO){
-    MHD_destroy_response(response);
-    return MHD_NO;
+/* add template map */
+static void add_template_map(template_map_queue_t *template_map, const char *keyWord, const char *replaceBy){
+  if(template_map==NULL){
+    log_warn("Unable to set template_map, hint: use initialize_template_map()\n");
+    return;
   }
-  /* add the response headers */
-  MHD_add_response_header(
-    response, "Content-Type", content_type);
-  if(headers != NULL)
-    for(size_t index=0; index<MAX_HEADERS && headers[index].keyWord != NULL && headers[index].valueWord != NULL; index++)
-      MHD_add_response_header(response, 
-        headers[index].keyWord, headers[index].valueWord);
-  /* add the response footers */
-  if(footers != NULL)
-    for(size_t index=0; index<MAX_FOOTERS && footers[index].keyWord != NULL && footers[index].valueWord != NULL; index++)
-      MHD_add_response_footer(response, 
-        footers[index].keyWord, footers[index].valueWord);
-  /* queue the response */
-  result = MHD_queue_response(
-    connection, status_code, response);
-  if(result == MHD_NO) 
-    log_err("Unable to respond with %s\n", content_type)
-  else log("--- --- %sResponding with%s: statusCode:[%d], Content-Type:[%s]\n",
-      ANSI_COLOR_Bright_Yellow, ANSI_COLOR_RESET, status_code, content_type)
-  /* free response */
-  MHD_destroy_response(response);
-  /* return result */
-  return result;
+  /* create new template_map_type_t */
+  template_map_type_t *temp = (template_map_type_t*)malloc(sizeof(template_map_type_t));
+  memset(temp, 0, sizeof(template_map_type_t));
+  temp->keyWord[0] = '\0';
+  temp->replaceBy[0] = '\0';
+  memcpy(temp->keyWord, keyWord, sizeof(char)*strlen(keyWord));
+  memcpy(temp->replaceBy, replaceBy, sizeof(char)*strlen(replaceBy));
+  /* add template_map to the queue */
+  queue_insert_item_on_top(template_map, temp, sizeof(template_map_type_t), free); // the queue will free the memory on queue_destructor
 }
 /* load_html_template is a method that loads a html_file (path) and uses regex to replace the template values {{KEY}}=>Value */
-static void load_html_template(const char *html_file, HTML_TemplateKeyValue *templateKeyValues, char *output) {
+static void load_html_template(const char *html_file, template_map_queue_t *template_map, char *buffer_output) {
   /* initialize the auxliary variables */
   char *html_contents=NULL;
-  char *temp=NULL;
-  char regex_pattern[2048] = "\0";
+  char *temp_word=NULL;
+  char regex_pattern[TEMPLATE_MAP_BUFFER_SIZE+16] = "\0";
   /* read the html file contents */
   read_text_file(html_file, &html_contents);
-  /* loop over all templateKeyValues */
-  for (size_t index = 0; index < MAX_TEMPLATE_REPLACEMENTS && templateKeyValues[index].keyWord != NULL && templateKeyValues[index].replaceBy != NULL; index++) {
+  if(template_map == NULL){
+    /* copy the html contents to the output buffer */
+    strcpy(buffer_output, html_contents);
+    /* free the html contents */
+    free(html_contents);
+    html_contents = NULL;
+    return;
+  }
+  /* replace template arguments */
+  __queue_item_t *item=NULL;
+  template_map_type_t *temp_map=(template_map_type_t*)malloc(sizeof(template_map_type_t));
+  /* iterate over the template_map elements */
+  queue_to_base(template_map);
+  while((item=queue_to_next(template_map)) != NULL){
+    /* assing temporal map */
+    memcpy(temp_map, (template_map_type_t*)item->data, sizeof(template_map_type_t));
     /* fabricate the regex */
-    sprintf(regex_pattern,"\\{\\{%s\\}\\}",templateKeyValues[index].keyWord);
+    snprintf(regex_pattern,TEMPLATE_MAP_BUFFER_SIZE+16,"\\{\\{%s\\}\\}",temp_map->keyWord);
     /* replace the regex matches */
-    replace_regex(regex_pattern, templateKeyValues[index].replaceBy, html_contents, &temp);
+    replace_regex(regex_pattern, temp_map->replaceBy, html_contents, &temp_word);
     /* copy the updated value to the html contents */
-    strcpy(html_contents, temp);
+    strcpy(html_contents, temp_word);
     /* free the temp */
-    free(temp);
-    temp = NULL;
+    free(temp_word);
+    temp_word = NULL;
   }
   /* finalize */
-  strcpy(output,html_contents);
-  free(html_contents); 
+  strcpy(buffer_output,html_contents);
+  free(html_contents);
+  free(temp_map);
+  html_contents = NULL;
+  temp_map = NULL;
 }
 
 #endif
