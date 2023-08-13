@@ -28,6 +28,8 @@
 #define	ANSI_COLOR_Bright_Cyan "\x1b[96m"
 #define	ANSI_COLOR_Bright_White "\x1b[97m"
 
+#define REGEX_BUFFER_SIZE (1<<16) /* 65536: the maximun length a regex replacement can have */
+
 pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* This log functionality marks the thread id, so that log messages are linked to the request thread */
@@ -107,44 +109,124 @@ static char *encode_base64(const char *message){
   return b64;
 }
 /* replace strings where regex matches */
-static void replace_regex(const char *pattern, const char *replacement, const char *source, char **result){
-  regex_t regex;
-  regmatch_t match;
-  size_t nmatch = 1;
-  size_t len = strlen(source) + 1;
-  /* validate input */
-  if(*result!=NULL)
-    log_fatal("Please pass a null pointer, as reference to replace_regex buffer");
-  /* allocate result buffer */
-  *result =((char*) realloc(*result, sizeof(char)*(len)));
+// static void replace_regex(const char *pattern, const char *replacement, const char *source, char **result){
+//   regex_t regex;
+//   regmatch_t match;
+//   size_t nmatch = 1;
+//   size_t len = strlen(source) + 1;
+//   /* validate input */
+//   if(*result!=NULL)
+//     log_fatal("Please pass a null pointer, as reference to replace_regex buffer");
+//   /* allocate result buffer */
+//   *result =(char*) realloc(*result, sizeof(char)*len);
 
-  if (regcomp(&regex, pattern, REG_EXTENDED) != 0) {
-    log_err("Failed to compile regex pattern: %s\n", pattern);
-    return;
+//   if (regcomp(&regex, pattern, REG_EXTENDED) != 0) {
+//     log_err("Failed to compile regex pattern: %s\n", pattern);
+//     return;
+//   }
+//   char *p = (char*)source;
+//   char *q = *result;
+//   size_t delta = (q - *result);
+//   log("delta[0]: %ld\n",delta);
+//   /* loop over all matches */
+//   while (regexec(&regex, p, nmatch, &match, 0) == 0) {
+//     size_t prefix_len = match.rm_so;
+//     // size_t match_len = match.rm_eo - match.rm_so;
+//     size_t replacement_len = strlen(replacement);
+//     /* Copy the prefix before the match */
+//     strncpy(q, p, prefix_len);
+//     q += prefix_len;
+//     /* Copy the replacement string */
+//     strncpy(q, replacement, replacement_len);
+//     q += replacement_len;
+//     /* Move p to the end of the match */
+//     p += match.rm_eo;
+//     /* Resize the result buffer if necessary */
+//     delta = (q - *result);
+//     size_t new_len = strlen(p) + delta + 1;
+//     // log_warn("new_len: %ld > len: %ld: delta: %ld\n", new_len, len, delta);
+//     log("delta[1]: %ld\n",delta);
+//     if (new_len > len) {
+//       log("new_len=%ld, len=%ld \n",new_len, len);
+//       delta = (q - *result) + abs(new_len - len);
+//       len = new_len;
+//       *result = (char*)realloc(*result, sizeof(char)*len);
+//       log("delta[2]: %ld\n",delta);
+//     }
+//   }
+//   log("delta[3]: %ld\n",delta);
+//   log("strlen(p):%ld \t sizeof(char)*len:%ld\n",strlen(p), sizeof(char)*len);
+//   /* Copy the remaining string after the last match */
+//   // log("len - delta: %ld = %ld - %ld\n",len - delta,len,delta);
+//   strncpy(*result, p, len - delta);
+//   regfree(&regex);
+// }
+
+#include <regex.h>
+#include <string.h>
+#include <stdlib.h>
+
+int replace_regex(char *str, const char *pattern, const char *replacement) {
+  regex_t regex;
+  int reti;
+  size_t len = strlen(str);
+  size_t offset = 0;
+  size_t nmatch = 1;
+  regmatch_t pmatch;
+
+  // Compile the regular expression
+  reti = regcomp(&regex, pattern, REG_EXTENDED);
+  if (reti != 0) {
+    regfree(&regex);
+    return -1;
   }
-  char *p = (char*)source;
-  char *q = *result;
-  while (regexec(&regex, p, nmatch, &match, 0) == 0) {
-    size_t prefix_len = match.rm_so;
-    // size_t match_len = match.rm_eo - match.rm_so;
+
+  // Loop over all matches in the string
+  while (regexec(&regex, str + offset, nmatch, &pmatch, 0) == 0) {
+    // Calculate the start and end position of the match in the original string
+    size_t start = offset + pmatch.rm_so;
+    size_t end = offset + pmatch.rm_eo;
+
+    // Calculate the length of the replacement string
     size_t replacement_len = strlen(replacement);
-    /* Copy the prefix before the match */
-    strncpy(q, p, prefix_len);
-    q += prefix_len;
-    /* Copy the replacement string */
-    strncpy(q, replacement, replacement_len);
-    q += replacement_len;
-    /* Move p to the end of the match */
-    p += match.rm_eo;
-    /* Resize the result buffer if necessary */
-    size_t new_len = strlen(p) + (q - *result) + 1;
-    if (new_len > len) {
-      len = new_len;
-      *result = (char*)realloc(*result, len);
+
+    // Calculate the length of the new string
+    size_t new_len = len - (end - start) + replacement_len;
+
+    // Allocate memory for the new string
+    char *new_str = malloc(new_len + 1);
+    if (new_str == NULL) {
+      regfree(&regex);
+      return -1;
     }
+
+    // Copy the original string up to the start of the match
+    strncpy(new_str, str, start);
+
+    // Append the replacement string
+    strncpy(new_str + start, replacement, replacement_len);
+
+    // Copy the rest of the original string after the match
+    strncpy(new_str + start + replacement_len, str + end, len - end);
+
+    // Null-terminate the new string
+    new_str[new_len] = '\0';
+
+    // Update the string pointer and length
+    str = new_str;
+    len = new_len;
+
+    // Update the offset to the next position after the current match
+    offset = start + replacement_len;
+
+    // Free the memory used by the old string
+    free(new_str);
   }
-  /* Copy the remaining string after the last match */
-  strncpy(q, p, len - (q - *result));
+
+  // Free the compiled regular expression
   regfree(&regex);
+
+  return 0;
 }
+
 #endif

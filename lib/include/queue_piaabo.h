@@ -52,23 +52,32 @@ typedef struct queue_item_t {
 typedef struct queue_t {
   int load_size;                  /* total items count in the queue */
   int load_index;                 /* current index (starts at zero) ends at load_size-1 */
-  __queue_item_t *__head;    /* pointer to the current (head) __queue_item */
+  int yield_index;                /* current yield index (starts at zero) ends at load_size-1 */
+  int yield_increment;            /* current yield increment +1 when the yield is forward and -1 when backwards*/
+  __queue_item_t *__head;         /* pointer to the current (head) __queue_item */
 } __queue_t;
+// pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+// pthread_mutex_lock(&log_mutex);
+// pthread_mutex_unlock(&log_mutex);
+
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 static inline bool queue_is_empty(__queue_t *Q);
 static inline bool queue_throw_unhealty(const char *msg);
 static inline bool queue_is_healty(__queue_t *Q);
 static inline __queue_item_t *queue_item_fabric(void *data, size_t data_size, free_fn_pointer *free_fn);
-static void queue_item_destructor(__queue_item_t *item);
+static inline void queue_item_destructor(__queue_item_t *item);
 static inline __queue_item_t *queue_to_next(__queue_t *Q);
 static inline __queue_item_t *queue_to_back(__queue_t *Q);
 static inline __queue_item_t *queue_to_index(__queue_t *Q, int index);
-static inline void queue_to_top(__queue_t *Q);
-static inline void queue_to_base(__queue_t *Q);
+static inline __queue_item_t *queue_to_top(__queue_t *Q);
+static inline __queue_item_t *queue_to_base(__queue_t *Q);
+static inline void queue_start_generator_up(__queue_t *Q);
+static inline void queue_start_generator_down(__queue_t *Q);
+static inline __queue_item_t *queue_yield(__queue_t *Q);
 static inline void queue_insert_item_on_top(__queue_t *Q, void *data, size_t data_size, free_fn_pointer *free_fn);
 static inline void queue_insert_item_on_base(__queue_t *Q, void *data, size_t data_size, free_fn_pointer *free_fn);
-static __queue_t *queue_fabric();
-static void queue_destructor(__queue_t *Q);
+static inline __queue_t *queue_fabric();
+static inline void queue_destructor(__queue_t *Q);
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 /* method to determine if __queue_t is empty */
 static inline bool queue_is_empty(__queue_t *Q){
@@ -138,7 +147,7 @@ static inline __queue_item_t *queue_item_fabric(void *data, size_t data_size, fr
   return new_queue_item;
 }
 /* method clear queue item */
-static void queue_item_destructor(__queue_item_t *item){
+static inline void queue_item_destructor(__queue_item_t *item){
   if(item==NULL || item->data == NULL)
     return;
   /* free the data if required */
@@ -184,13 +193,34 @@ static inline __queue_item_t *queue_to_index(__queue_t *Q, int index){
 }
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 /* method for taking a queue to the top, the top means the last element of the queue */
-static inline void queue_to_top(__queue_t *Q){
+static inline __queue_item_t *queue_to_top(__queue_t *Q){
   while(queue_to_next(Q) != NULL);
+  return Q->__head;
 }
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 /* method for taking a queue to the base, the base means the start of the queue */
-static inline void queue_to_base(__queue_t *Q){
+static inline __queue_item_t *queue_to_base(__queue_t *Q){
   while(queue_to_back(Q) != NULL);
+  return Q->__head;
+}
+/* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
+/* configrue the yield as starting at the bottom and moving forward */
+static inline void queue_start_generator_up(__queue_t *Q){
+  Q->yield_index = 0;
+  Q->yield_increment = 1;
+}
+/* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
+/* configrue the yield as starting at the top and moving backward */
+static inline void queue_start_generator_down(__queue_t *Q){
+  Q->yield_index = Q->load_index - 1;
+  Q->yield_increment = -1;
+}
+/* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
+/* yields the next queue_item according to the started generator */
+static inline __queue_item_t *queue_yield(__queue_t *Q){
+  int current_index = Q->yield_index;
+  Q->yield_index += Q->yield_increment;
+  return queue_to_index(Q, current_index);
 }
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 /* method for appending __queue_item_t to __queue_t top */
@@ -230,7 +260,7 @@ static inline void queue_insert_item_on_base(__queue_t *Q, void *data, size_t da
   Q->load_size ++;
 }
 /* fabric for a general porpouse queue */
-static __queue_t *queue_fabric(){
+static inline __queue_t *queue_fabric(){
   log_warn("Missing queue mutex for a thread safe implementation\n");
   /* allocate memory for the queue */
   __queue_t *new_queue = (__queue_t*)malloc(sizeof(__queue_t));
@@ -239,6 +269,9 @@ static __queue_t *queue_fabric(){
   /* initialize the queue values */
   new_queue->load_size = 0;
   new_queue->load_index = -1;
+  /* yield functionalities are initialy configured as a generator_up */
+  new_queue->yield_index = 0;
+  new_queue->yield_increment = 1;
   new_queue->__head = NULL;
   /* assert the queue is healty */
   ASSERT(queue_is_healty(new_queue));
@@ -248,7 +281,7 @@ static __queue_t *queue_fabric(){
 }
 /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 /* destructor for a general porpouse queue */
-static void queue_destructor(__queue_t *Q){
+static inline void queue_destructor(__queue_t *Q){
   if(Q==NULL)
     return;
   /* assert the queue is healty */

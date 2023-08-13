@@ -7,7 +7,7 @@ typedef struct item_type {
 typedef __queue_t items_queue_t;
 
 
-#define COUNT_ITEMS 10
+#define COUNT_ITEMS 1000000
 int main(int argc, char const *argv[])
 {
   clock_t start;
@@ -22,7 +22,7 @@ int main(int argc, char const *argv[])
   time_taken = (double)(end - start) / CLOCKS_PER_SEC; // Calculate the time taken
   printf("[queue_fabric]: %f seconds\n", time_taken);
   /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
-
+  
   /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
   /* queue population */
   start = clock();
@@ -53,6 +53,26 @@ int main(int argc, char const *argv[])
   end = clock();
   time_taken = (double)(end - start) / CLOCKS_PER_SEC; // Calculate the time taken
   printf("[queue_to_top]: %f seconds\n", time_taken);
+  /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
+
+  /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
+  /* queue generator up movements */
+  start = clock();
+  queue_start_generator_up(items);
+  while(queue_yield(items) != NULL);
+  end = clock();
+  time_taken = (double)(end - start) / CLOCKS_PER_SEC; // Calculate the time taken
+  printf("[queue_start_generator_up]: %f seconds\n", time_taken);
+  /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
+
+  /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
+  /* queue generator up movements */
+  start = clock();
+  queue_start_generator_down(items);
+  while(queue_yield(items) != NULL);
+  end = clock();
+  time_taken = (double)(end - start) / CLOCKS_PER_SEC; // Calculate the time taken
+  printf("[queue_start_generator_down]: %f seconds\n", time_taken);
   /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */
 
   /* --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- */

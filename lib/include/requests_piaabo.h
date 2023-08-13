@@ -153,10 +153,10 @@ void free_request_config(request_config_t *rc){
   /* free the request config */
   free(rc);
 }
-/* add header functionality */
-void add_header(request_config_t *rc, const char *dheader){
-  if(rc==NULL){
-    log_warn("Null reqest_config_t, hint: use initialize_request_config()\n");
+/* add to header queue functionality */
+void add_to_headers_queue(headers_queue_t *headers_queue, const char *dheader){
+  if(headers_queue==NULL){
+    log_warn("Null headers_queue_t, hint: use queue_fabric()\n");
     return;
   }
   /* create new header_type_t */
@@ -165,12 +165,21 @@ void add_header(request_config_t *rc, const char *dheader){
   header->value[0] = '\0';
   memcpy(header->value, dheader, sizeof(char)*strlen(dheader));
   /* add header to the queue */
-  queue_insert_item_on_top(rc->_headers, header, sizeof(header_type_t), free); // the queue will free the memory on queue_destructor
+  queue_insert_item_on_top(headers_queue, header, sizeof(header_type_t), free); // the queue will free the memory on queue_destructor
 }
-/* add param functionality */
-void add_param(request_config_t *rc, const char *dkey, const char *dvalue){
+/* add header functionality */
+void add_request_header(request_config_t *rc, const char *dheader){
   if(rc==NULL){
     log_warn("Null reqest_config_t, hint: use initialize_request_config()\n");
+    return;
+  }
+  /* add header to the queue */
+  add_to_headers_queue(rc->_headers, dheader);
+}
+/* add to param queue functionality */
+void add_to_params_queue(params_queue_t *params_queue, const char *dkey, const char *dvalue){
+  if(params_queue==NULL){
+    log_warn("Null params_queue_t, hint: use queue_fabric()\n");
     return;
   }
   /* create new param_type_t */
@@ -181,7 +190,16 @@ void add_param(request_config_t *rc, const char *dkey, const char *dvalue){
   memcpy(param->key, dkey, sizeof(char)*strlen(dkey));
   memcpy(param->value, dvalue, sizeof(char)*strlen(dvalue));
   /* add param to the queue */
-  queue_insert_item_on_top(rc->_params, param, sizeof(param_type_t), free); // the queue will free the memory on queue_destructor
+  queue_insert_item_on_top(params_queue, param, sizeof(param_type_t), free); // the queue will free the memory on queue_destructor
+}
+/* add param functionality */
+void add_request_param(request_config_t *rc, const char *dkey, const char *dvalue){
+  if(rc==NULL){
+    log_warn("Null reqest_config_t, hint: use initialize_request_config()\n");
+    return;
+  }
+  /* add param to the queue */
+  add_to_params_queue(rc->_params, dkey, dvalue);
 }
 /* url_encode_string */
 static void url_encode_string(CURL *curl_handle, char *string, char **encoded_string){
@@ -208,8 +226,8 @@ static void encode_get_params(CURL *curl_handle, params_queue_t *params, char **
   /* initialize encoded_params variable */
   memset(*encoded_params, 0, strlen(*encoded_params));
   __queue_item_t *item=NULL;
-  queue_to_base(params);
-  while((item=queue_to_next(params)) != NULL){
+  queue_start_generator_up(params);
+  while((item=queue_yield(params)) != NULL){
     /* clear the temporary variables */
     memset(temp_in, 0, sizeof(char)*strlen(temp_in));
     memset(temp_out, 0, sizeof(char)*strlen(temp_out));
@@ -240,6 +258,14 @@ static void encode_get_params(CURL *curl_handle, params_queue_t *params, char **
   /* free the temporal pointers */
   free(temp_in);
   free(temp_out);
+}
+/* encode_get_params without curl_handle */
+static void encode_get_params_minimal(params_queue_t *params, char **encoded_params){
+  CURL *curl_handle = curl_easy_init();
+  if(curl_handle) {
+    encode_get_params(curl_handle, params, encoded_params);
+    curl_easy_cleanup(curl_handle);
+  }
 }
 /* configure the curl_handle acording to options */
 void configure_curl(CURL *curl_handle, unsigned int option, request_config_t *rc){
@@ -324,8 +350,8 @@ void configure_curl(CURL *curl_handle, unsigned int option, request_config_t *rc
   case CURLOPT_HTTPHEADER:
     if(rc->_headers!=NULL){
       __queue_item_t *item=NULL;
-      queue_to_base(rc->_headers);
-      while((item=queue_to_next(rc->_headers)) != NULL){
+      queue_start_generator_up(rc->_headers);
+      while((item=queue_yield(rc->_headers)) != NULL){
         memcpy(temp_header, (header_type_t*)item->data, sizeof(header_type_t));
         if(temp_header!=NULL && temp_header->value[0]!='\0' && strlen(temp_header->value)>0)
           rc->_headers_list = curl_slist_append(rc->_headers_list, temp_header->value);

@@ -25,13 +25,46 @@
 #define SESSION_COOKIE_SIZE (1<<6)  /* 64: this is the length of the session cookie  */
 #define TEMPLATE_MAP_BUFFER_SIZE (1<<16) /* 65536: the maximun length a template replacement can have */
 
+typedef struct {
+  void *dh_cls;
+  struct MHD_Connection *connection;
+  const char *url;
+  const char *method;
+  const char *version;
+  const char *upload_data;
+  size_t *upload_data_size;
+  void **con_cls;
+  gnutls_session_t tls_session;
+  gnutls_x509_crt_t client_cert;
+  char *distinguished_name;
+  char *alt_name;
+} routing_data_t;
+
 typedef const char* output_char_function_pointer();
-typedef enum MHD_Result route_pointer(
-  void *dh_cls, struct MHD_Connection *connection);
+typedef enum MHD_Result route_pointer(routing_data_t *route_data);
 
 typedef __queue_t template_map_queue_t;
 typedef struct {char keyWord[TEMPLATE_MAP_BUFFER_SIZE]; char replaceBy[TEMPLATE_MAP_BUFFER_SIZE];} template_map_type_t;
 
+/* initialize routing data */
+routing_data_t initialize_routing_data(
+  void *dh_cls, struct MHD_Connection *connection, const char *url,
+  const char *method, const char *version){
+  routing_data_t route_data={};
+  route_data.dh_cls=dh_cls;
+  route_data.connection=connection;
+  route_data.url=url;
+  route_data.method=method;
+  route_data.version=version;
+  route_data.upload_data=NULL;
+  route_data.upload_data_size=0;
+  route_data.con_cls=NULL;
+  route_data.tls_session=NULL;
+  route_data.client_cert=NULL;
+  route_data.distinguished_name=NULL;
+  route_data.alt_name=NULL;
+  return route_data;
+}
 /* access function to process Incomming request */
 static enum MHD_Result on_client_connect(
   void *cls, const struct sockaddr *addr, socklen_t addrlen){
@@ -86,23 +119,21 @@ static enum MHD_Result log_connection_value(
   return MHD_YES;
 }
 /* log request information */
-static void log_request(
-  void *cls, 
-  struct MHD_Connection *connection,
-  const char *url,
-  const char *method, 
-  const char *version,
-  const char *upload_data,
-  size_t *upload_data_size, void **con_cls){
+static void log_request(routing_data_t *route_data){
   /* log path and version */
   log("--- %s[%s] request%s, for path: %s, using version %s\n", 
-    ANSI_COLOR_Bright_Yellow, method, ANSI_COLOR_RESET, url, version);
+    ANSI_COLOR_Bright_Yellow, route_data->method, ANSI_COLOR_RESET, route_data->url, route_data->version);
+  /* log tls identity */
+  if(route_data->distinguished_name != NULL)
+    log("TLS CERT:\tdistinguished_name:%s\n",route_data->distinguished_name);
+  if(route_data->alt_name != NULL)
+    log("TLS CERT:\talt_name:%s\n",route_data->alt_name);
   /* log request values */
-  MHD_get_connection_values(connection, MHD_HEADER_KIND, &log_connection_value, (void *)&ANSI_COLOR_Red);
-  MHD_get_connection_values(connection, MHD_COOKIE_KIND, &log_connection_value, (void *)&ANSI_COLOR_Magenta);
-  MHD_get_connection_values(connection, MHD_POSTDATA_KIND, &log_connection_value, (void *)&ANSI_COLOR_Blue);
-  MHD_get_connection_values(connection, MHD_GET_ARGUMENT_KIND, &log_connection_value, (void *)&ANSI_COLOR_Green);
-  MHD_get_connection_values(connection, MHD_FOOTER_KIND, &log_connection_value, (void *)&ANSI_COLOR_Bright_Yellow);
+  MHD_get_connection_values(route_data->connection, MHD_HEADER_KIND, &log_connection_value, (void *)&ANSI_COLOR_Red);
+  MHD_get_connection_values(route_data->connection, MHD_COOKIE_KIND, &log_connection_value, (void *)&ANSI_COLOR_Magenta);
+  MHD_get_connection_values(route_data->connection, MHD_POSTDATA_KIND, &log_connection_value, (void *)&ANSI_COLOR_Blue);
+  MHD_get_connection_values(route_data->connection, MHD_GET_ARGUMENT_KIND, &log_connection_value, (void *)&ANSI_COLOR_Green);
+  MHD_get_connection_values(route_data->connection, MHD_FOOTER_KIND, &log_connection_value, (void *)&ANSI_COLOR_Bright_Yellow);
 }
 /* session manager with cookies */
 static void make_session_cookie(char *set_value){
@@ -165,7 +196,7 @@ static void add_template_map(template_map_queue_t *template_map, const char *key
 static void load_html_template(const char *html_file, template_map_queue_t *template_map, char *buffer_output) {
   /* initialize the auxliary variables */
   char *html_contents=NULL;
-  char *temp_word=NULL;
+  char *temp_word = NULL;
   char regex_pattern[TEMPLATE_MAP_BUFFER_SIZE+16] = "\0";
   /* read the html file contents */
   read_text_file(html_file, &html_contents);
@@ -181,19 +212,25 @@ static void load_html_template(const char *html_file, template_map_queue_t *temp
   __queue_item_t *item=NULL;
   template_map_type_t *temp_map=(template_map_type_t*)malloc(sizeof(template_map_type_t));
   /* iterate over the template_map elements */
-  queue_to_base(template_map);
-  while((item=queue_to_next(template_map)) != NULL){
+  queue_start_generator_up(template_map);
+  while((item=queue_yield(template_map)) != NULL){
     /* assing temporal map */
     memcpy(temp_map, (template_map_type_t*)item->data, sizeof(template_map_type_t));
     /* fabricate the regex */
     snprintf(regex_pattern,TEMPLATE_MAP_BUFFER_SIZE+16,"\\{\\{%s\\}\\}",temp_map->keyWord);
     /* replace the regex matches */
-    replace_regex(regex_pattern, temp_map->replaceBy, html_contents, &temp_word);
+    // replace_regex(regex_pattern, temp_map->replaceBy, html_contents, &temp_word);
+    // re_replace(html_contents, regex_pattern, &temp_word, NULL)
+    
+    replace_regex(html_contents, regex_pattern, temp_map->replaceBy);
+
     /* copy the updated value to the html contents */
-    strcpy(html_contents, temp_word);
-    /* free the temp */
-    free(temp_word);
-    temp_word = NULL;
+    // log("html_contents: %s\n",html_contents);
+    // log("temp_word: %s\n",temp_word);
+    // strcpy(html_contents, temp_word);
+    // /* free the temp */
+    // free(temp_word);
+    // temp_word = NULL;
   }
   /* finalize */
   strcpy(buffer_output,html_contents);

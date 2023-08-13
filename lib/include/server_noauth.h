@@ -23,9 +23,19 @@ static enum MHD_Result answer_to_connection_noauth(
     *con_cls = connection;
     return MHD_YES;
   }
+  /* initialize routing_data_t struct */
+  routing_data_t route_data = {};
+  route_data.dh_cls=dh_cls;
+  route_data.connection=connection;
+  route_data.url=url;
+  route_data.method=method;
+  route_data.version=version;
+  route_data.upload_data=upload_data;
+  route_data.upload_data_size=upload_data_size;
+  route_data.con_cls=con_cls;
   /* log requests */
-  log_request(dh_cls, connection, url, method, version, upload_data, upload_data_size, con_cls);
-  /* respond to request allowing access to the secure methods */
-  return route_coordinator(url, method, version)(dh_cls, connection);
+  log_request(&route_data);
+  /* respond to request allowing access to the public methods */
+  return route_coordinator(&route_data)(&route_data);
 }
 #endif

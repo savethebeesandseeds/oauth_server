@@ -15,13 +15,13 @@ int main(int argc, char const *argv[])
   request_config->_headers_callback = header_callback;
   request_config->_curl_verbose = true;
   /* set the params */
-  add_param(request_config, "response_type", "code");
-  add_param(request_config, "client_id", "7CCUISrBbfkLdJ46p7RohFKo");
-  add_param(request_config, "redirect_uri", "http://localhost:8888/");
-  add_param(request_config, "scope", "photo+offline_access");
-  add_param(request_config, "state", "du9JpZqN6LKO_gX4");
+  add_request_param(request_config, "response_type", "code");
+  add_request_param(request_config, "client_id", "7CCUISrBbfkLdJ46p7RohFKo");
+  add_request_param(request_config, "redirect_uri", "http://localhost:8888/");
+  add_request_param(request_config, "scope", "photo+offline_access");
+  add_request_param(request_config, "state", "du9JpZqN6LKO_gX4");
   /* set the headers */
-  add_header(request_config, "Content-Type application/json");
+  add_request_header(request_config, "Content-Type application/json");
   /* Make the request */
   http_request(request_config);
   fprintf(stdout,"Response: \n%s\n",request_text_response->response);

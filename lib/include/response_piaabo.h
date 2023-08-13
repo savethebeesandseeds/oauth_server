@@ -53,8 +53,8 @@ static void destroy_server_response(server_response_t *response){
 static void set_response_headers(server_response_t *response){
   __queue_item_t *item=NULL;
   response_header_type_t *temp=(response_header_type_t*)malloc(sizeof(response_header_type_t));
-  queue_to_base(response->headers);
-  while((item=queue_to_next(response->headers)) != NULL){
+  queue_start_generator_up(response->headers);
+  while((item=queue_yield(response->headers)) != NULL){
     memcpy(temp, (response_header_type_t*)item->data, sizeof(response_header_type_t));
     if(temp!=NULL)
       if(MHD_NO == MHD_add_response_header(response->mhd_response, temp->key, temp->value))
@@ -66,8 +66,8 @@ static void set_response_headers(server_response_t *response){
 static void set_response_footers(server_response_t *response){
   __queue_item_t *item=NULL;
   response_footer_type_t *temp=(response_footer_type_t*)malloc(sizeof(response_footer_type_t));
-  queue_to_base(response->footers);
-  while((item=queue_to_next(response->footers)) != NULL){
+  queue_start_generator_up(response->footers);
+  while((item=queue_yield(response->footers)) != NULL){
     memcpy(temp, (response_footer_type_t*)item->data, sizeof(response_footer_type_t));
     if(temp!=NULL)
       if(MHD_NO == MHD_add_response_header(response->mhd_response, temp->key, temp->value))
@@ -76,7 +76,7 @@ static void set_response_footers(server_response_t *response){
   free(temp);
 }
 /* add response header functionality */
-static void add_header(server_response_t *response, const char *dkey, const char *dvalue){
+static void add_response_header(server_response_t *response, const char *dkey, const char *dvalue){
   if(response->headers==NULL){
     log_warn("Unable to set response header, hint: use initialize_headers()\n");
     return;
@@ -92,7 +92,7 @@ static void add_header(server_response_t *response, const char *dkey, const char
   queue_insert_item_on_top(response->headers, dheader, sizeof(response_header_type_t), free); // the queue will free the memory on queue_destructor
 }
 /* add response footer functionality */
-static void add_footer(server_response_t *response, const char *dkey, const char *dvalue){
+static void add_response_footer(server_response_t *response, const char *dkey, const char *dvalue){
   if(response->footers==NULL){
     log_warn("Unable to set response footer, hint: use initialize_footers()\n");
     return;
@@ -125,7 +125,7 @@ static enum MHD_Result perform_response(server_response_t *response, const char 
   /* temporal variables */
   enum MHD_Result temp_result;
   /* content type response header */
-  add_header(response, "Content-Type", content_type);
+  add_response_header(response, "Content-Type", content_type);
   /* set the response headers */
   set_response_headers(response);
   /* add the response footers */

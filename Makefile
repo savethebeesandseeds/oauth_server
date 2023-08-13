@@ -41,7 +41,7 @@ clean:
 # --- --- --- --- --- 
 m_oauth_server:
 	$(GCC) $(HEADERS) \
-	$(libinclude_path)/../oauth_server.c $(SERVER_LINKS) -o ./build/oauth_server.o
+	$(libinclude_path)/../oauth_server.c $(SERVER_LINKS) $(CLIENT_LINKS) -o ./build/oauth_server.o
 # --- --- --- --- --- 
 server:
 	make m_oauth_server
@@ -104,6 +104,23 @@ ifeq ($(ENV),valgrind-debug)
 	valgrind --tool=$(VALGRIND_TOOL) ./build/html_render_test.o
 else
 	./build/html_render_test.o
+endif
+endif
+# --- --- --- --- --- 
+m_yield_test:
+	$(GCC) $(HEADERS) \
+	$(libtest_path)/yield_test.c $(SERVER_LINKS) -o ./build/yield_test.o
+# --- --- --- --- --- 
+yield_test:
+	make m_yield_test
+	echo "building [yield_test]..."
+ifeq ($(ENV),gdb-debug)
+	gdb ./build/yield_test.o
+else
+ifeq ($(ENV),valgrind-debug)
+	valgrind --tool=$(VALGRIND_TOOL) ./build/yield_test.o
+else
+	./build/yield_test.o
 endif
 endif
 # --- --- --- --- --- 

@@ -131,27 +131,31 @@ static enum MHD_Result answer_to_connection_tls_auth(
     *con_cls = connection;
     return MHD_YES;
   }
+  /* initialize routing_data_t struct */
+  routing_data_t route_data = initialize_routing_data(dh_cls, connection, url,method, version);
+  /* aditional fields */
+  route_data.upload_data=upload_data;
+  route_data.upload_data_size=upload_data_size;
+  route_data.con_cls=con_cls;
   /* check if the client send a ssl/tls cert */
-  gnutls_session_t tls_session = get_tls_session(connection);
-  if(tls_session==NULL){
+  route_data.tls_session = get_tls_session(connection);
+  if(route_data.tls_session==NULL){
     log_warn("The client is not trying to reach this server, has no tls_session\n");
-    return ask_for_tls_authentication(connection);
+    return ask_authentication(&route_data);
   }
   /* retrive the ssl/tls cert */
-  gnutls_x509_crt_t client_cert = get_client_certificate(tls_session);
-  if(client_cert==NULL){
+  route_data.client_cert = get_client_certificate(route_data.tls_session);
+  if(route_data.client_cert==NULL){
     log_warn("No tls certficate found to authenticate client request\n");
-    return ask_for_tls_authentication(connection);
+    return ask_authentication(&route_data);
   }
   /* retrive the client distinguished name */
-  char *distinguished_name = cert_auth_get_dn(client_cert);
+  route_data.distinguished_name = cert_auth_get_dn(route_data.client_cert);
   /* retrive the client alternative name */
-  char *alt_name = MHD_cert_auth_get_alt_name(client_cert,0,0);
+  route_data.alt_name = MHD_cert_auth_get_alt_name(route_data.client_cert,0,0);
   /* log requests */
-  log("TLS CERT:\tdistinguished_name:%s\n",distinguished_name);
-  log("TLS CERT:\talt_name:%s\n",alt_name);
-  log_request(dh_cls, connection, url, method, version, upload_data, upload_data_size, con_cls);
+  log_request(&route_data);
   /* respond to request allowing access to the secure methods */
-  return secure_route_coordinator(url, method, version)(dh_cls, connection);
+  return secure_route_coordinator(&route_data)(&route_data);
 }
 #endif
